@@ -2,17 +2,17 @@ import pygame  # Main game library
 import random  # For enemy placement
 import sys     # For system exit
 
-# Initialize pygame
+# Initializing pygame
 pygame.init()
 
 # Screen dimensions and setup
 WIDTH, HEIGHT = 900, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Create game window
+screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Creating game window
 pygame.display.set_caption("Tank War")  # Title of the game window
 clock = pygame.time.Clock()  # Clock to control FPS
 font = pygame.font.SysFont(None, 36)  # Font for rendering text
 
-# Define some colors
+# Defining some colors
 WHITE, BLACK, RED, GREEN, BLUE = (255, 255, 255), (0, 0, 0), (200, 0, 0), (0, 255, 0), (0, 0, 255)
 
 # Base class for all game objects (uses inheritance)
@@ -23,7 +23,7 @@ class GameObject(pygame.sprite.Sprite):
         self._color = color  # Protected color
 
     def draw(self, surface):
-        pygame.draw.rect(surface, self._color, self._rect)  # Draw rectangle object
+        pygame.draw.rect(surface, self._color, self._rect)  # Drawing rectangle object
 
     def get_rect(self):
         return self._rect  # Accessor for rectangle
@@ -36,12 +36,12 @@ class Projectile(GameObject):
         self._damage = damage  # Damage value
 
     def update(self):
-        self._rect.x += self._speed  # Move projectile
+        self._rect.x += self._speed  # Moving projectile
         if self._rect.right < 0 or self._rect.left > WIDTH:
-            self.kill()  # Remove if it leaves screen
+            self.kill()  # Removing if it leaves screen
 
     def get_damage(self):
-        return self._damage  # Return damage value
+        return self._damage  # Returning damage value
 
 # Player tank class
 class Tank(GameObject):
