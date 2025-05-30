@@ -1,100 +1,105 @@
-import pygame  # Main game library
-import random  # For enemy placement
-import sys     # For system exit
+import pygame
+import random
+import sys
 
-# Initializing pygame
+# Initialize pygame
 pygame.init()
 
-# Screen dimensions and setup
+# Screen setup
 WIDTH, HEIGHT = 900, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))  # Creating game window
-pygame.display.set_caption("Tank War")  # Title of the game window
-clock = pygame.time.Clock()  # Clock to control FPS
-font = pygame.font.SysFont(None, 36)  # Font for rendering text
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Tank War")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont(None, 36)
+small_font = pygame.font.SysFont(None, 24)
 
-# Defining some colors
+# Colors
 WHITE, BLACK, RED, GREEN, BLUE = (255, 255, 255), (0, 0, 0), (200, 0, 0), (0, 255, 0), (0, 0, 255)
+PURPLE = (128, 0, 128)
 
-# Base class for all game objects (uses inheritance)
 class GameObject(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height, color):
         super().__init__()
-        self._rect = pygame.Rect(x, y, width, height)  # Protected rectangle for position and size
-        self._color = color  # Protected color
+        self._rect = pygame.Rect(x, y, width, height)
+        self._color = color
 
     def draw(self, surface):
-        pygame.draw.rect(surface, self._color, self._rect)  # Drawing rectangle object
+        pygame.draw.rect(surface, self._color, self._rect)
 
     def get_rect(self):
-        return self._rect  # Accessor for rectangle
+        return self._rect
 
-# Class for bullets/projectiles fired by the tank
 class Projectile(GameObject):
-    def __init__(self, x, y, direction, speed=10, damage=20):
-        super().__init__(x, y, 10, 4, RED)  # Projectile is a small red rectangle
-        self._speed = speed * direction  # Direction: 1 for right
-        self._damage = damage  # Damage value
+    def __init__(self, x, y, direction, speed=10, damage=20, color=RED):
+        super().__init__(x, y, 10, 4, color)
+        self._speed = speed * direction
+        self._damage = damage
+        self._direction = direction
 
     def update(self):
-        self._rect.x += self._speed  # Moving projectile
+        self._rect.x += self._speed
         if self._rect.right < 0 or self._rect.left > WIDTH:
-            self.kill()  # Removing if it leaves screen
+            self.kill()
 
     def get_damage(self):
-        return self._damage  # Returning damage value
+        return self._damage
 
-# Player tank class
+    def get_direction(self):
+        return self._direction
+
 class Tank(GameObject):
     def __init__(self):
-        super().__init__(100, HEIGHT - 80, 60, 40, BLUE)  # Initial tank size and position
-        self._health = 100  # Starting health
-        self._lives = 3     # Number of lives
-        self._projectiles = pygame.sprite.Group()  # Group of bullets
-        self._direction = 1  # Always faces/shoots right
-
-        # Jump-related attributes
-        self._vel_y = 0           # Vertical velocity
-        self._on_ground = True    # Is the tank touching the ground?
-        self._gravity = 0.5       # Gravity constant
-        self._jump_power = -10    # Jump velocity (negative to go up)
+        super().__init__(100, HEIGHT - 80, 60, 40, BLUE)
+        self._health = 100
+        self._lives = 3
+        self._projectiles = pygame.sprite.Group()
+        self._direction = 1
+        self._vel_y = 0
+        self._on_ground = True
+        self._gravity = 0.5
+        self._jump_power = -10
+        self._shoot_cooldown = 0
 
     def move(self, keys):
         if keys[pygame.K_LEFT]:
-            self._rect.x -= 5  # Move left
+            self._rect.x -= 5
         if keys[pygame.K_RIGHT]:
-            self._rect.x += 5  # Move right
-        if keys[pygame.K_UP] and self._on_ground:  # Jump when UP key pressed and on ground
+            self._rect.x += 5
+        if keys[pygame.K_UP] and self._on_ground:
             self._vel_y = self._jump_power
             self._on_ground = False
 
-        # Apply gravity
         self._vel_y += self._gravity
         self._rect.y += self._vel_y
 
-        # Ground collision detection (simulate ground at HEIGHT - 40)
         if self._rect.bottom >= HEIGHT - 40:
             self._rect.bottom = HEIGHT - 40
             self._vel_y = 0
             self._on_ground = True
 
+        if self._shoot_cooldown > 0:
+            self._shoot_cooldown -= 1
+
     def shoot(self):
-        bullet = Projectile(self._rect.right, self._rect.centery, direction=1)
-        self._projectiles.add(bullet)  # Add new bullet to group
+        if self._shoot_cooldown == 0:
+            bullet = Projectile(self._rect.right, self._rect.centery, direction=1)
+            self._projectiles.add(bullet)
+            self._shoot_cooldown = 15
 
     def update(self):
-        self._projectiles.update()  # Update all projectiles
+        self._projectiles.update()
 
     def take_damage(self, amount):
         self._health -= amount
         if self._health <= 0:
             self._lives -= 1
-            self._health = 100  # Reset health if a life is lost
+            self._health = 100
 
     def is_alive(self):
         return self._lives > 0
 
     def get_projectiles(self):
-        return self._projectiles  # Return bullet group
+        return self._projectiles
 
     def get_health(self):
         return self._health
@@ -103,21 +108,34 @@ class Tank(GameObject):
         return self._lives
 
     def draw(self, surface):
-        super().draw(surface)  # Draw the tank
+        super().draw(surface)
         for projectile in self._projectiles:
-            projectile.draw(surface)  # Draw bullets
+            projectile.draw(surface)
 
-# Enemy tank class
 class Enemy(GameObject):
-    def __init__(self, x, y, health=50, speed=-2):
-        super().__init__(x, y, 40, 40, RED)  # Size and color
+    def __init__(self, x, y, health=50, speed=-2, can_shoot=False):
+        super().__init__(x, y, 40, 40, RED)
         self._health = health
         self._speed = speed
+        self._can_shoot = can_shoot
+        self._projectiles = pygame.sprite.Group()
+        self._shoot_timer = random.randint(60, 180)
+        self._direction = -1
 
     def update(self):
-        self._rect.x += self._speed  # Move enemy
-        if self._rect.right < 0 or self._rect.left > WIDTH:
-            self._speed *= -1  # Change direction if out of bounds
+        self._rect.x += self._speed
+        
+        if self._can_shoot:
+            self._shoot_timer -= 1
+            if self._shoot_timer <= 0:
+                self.shoot()
+                self._shoot_timer = random.randint(60, 180)
+        
+        self._projectiles.update()
+
+    def shoot(self):
+        bullet = Projectile(self._rect.left, self._rect.centery, direction=-1, color=GREEN)
+        self._projectiles.add(bullet)
 
     def take_damage(self, damage):
         self._health -= damage
@@ -125,77 +143,190 @@ class Enemy(GameObject):
     def is_alive(self):
         return self._health > 0
 
-    def draw(self, surface):
-        super().draw(surface)  # Draw enemy
-        pygame.draw.rect(surface, BLACK, (self._rect.x, self._rect.y - 10, 40, 5))  # Health bar background
-        pygame.draw.rect(surface, GREEN, (self._rect.x, self._rect.y - 10, max(0, self._health * 0.8), 5))  # Current health
+    def get_projectiles(self):
+        return self._projectiles
 
-# Boss class that inherits from Enemy
+    def draw(self, surface):
+        super().draw(surface)
+        pygame.draw.rect(surface, BLACK, (self._rect.x, self._rect.y - 10, 40, 5))
+        pygame.draw.rect(surface, GREEN, (self._rect.x, self._rect.y - 10, max(0, self._health * 0.8), 5))
+        for projectile in self._projectiles:
+            projectile.draw(surface)
+
 class Boss(Enemy):
     def __init__(self, x, y):
-        super().__init__(x, y, health=300, speed=-1)  # Stronger and slower
-        self._rect = pygame.Rect(x, y, 100, 100)  # Bigger size
-        self._color = (128, 0, 128)  # Different color
+        super().__init__(x, y, health=300, speed=-1, can_shoot=True)
+        self._rect = pygame.Rect(x, y, 100, 100)
+        self._color = PURPLE
+        self._shoot_timer = 30
 
     def draw(self, surface):
-        pygame.draw.rect(surface, self._color, self._rect)  # Boss rectangle
-        pygame.draw.rect(surface, BLACK, (self._rect.x, self._rect.y - 10, 100, 10))  # Health bar background
-        pygame.draw.rect(surface, GREEN, (self._rect.x, self._rect.y - 10, max(0, self._health * 0.33), 10))  # Health
+        pygame.draw.rect(surface, self._color, self._rect)
+        pygame.draw.rect(surface, BLACK, (self._rect.x, self._rect.y - 15, 100, 10))
+        pygame.draw.rect(surface, GREEN, (self._rect.x, self._rect.y - 15, max(0, self._health * 0.33), 10))
+        for projectile in self._projectiles:
+            projectile.draw(surface)
 
-# Main game class that controls levels, UI, logic
 class Game:
     def __init__(self):
-        self._level = 1  # Start at level 1
+        self._level = 1
         self._score = 0
         self._tank = Tank()
         self._enemies = pygame.sprite.Group()
         self._boss = None
         self._game_over = False
-        self.load_level()  # Load initial level
+        self._won_game = False
+        self._show_instructions = True
+        self._level_complete = False
+        self._enemies_killed = 0
+        self._enemy_spawn_timer = 0
+        self.load_level()
+
+    def show_instructions(self):
+        while self._show_instructions:
+            screen.fill(BLACK)
+            
+            title = font.render("TANK WAR - INSTRUCTIONS", True, WHITE)
+            screen.blit(title, (WIDTH//2 - title.get_width()//2, 50))
+            
+            instructions = [
+                "CONTROLS:",
+                "- LEFT/RIGHT ARROW KEYS: Move Tank",
+                "- UP ARROW KEY: Jump",
+                "- SPACEBAR: Shoot",
+                "",
+                "LEVELS:",
+                "- Level 1: Kill 20 enemies (some can shoot)",
+                "- Level 2: Kill 20 enemies (more can shoot)",
+                "- Level 3: Kill 20 enemies then defeat the boss",
+                "",
+                "COMBAT:",
+                "- Enemy bullets can be destroyed by your bullets",
+                "- Avoid enemy contact to prevent damage",
+                "",
+                "Press SPACE to start the game"
+            ]
+            
+            y_pos = 120
+            for line in instructions:
+                if line.startswith("-"):
+                    text = small_font.render(line, True, WHITE)
+                else:
+                    text = font.render(line, True, GREEN if "CONTROLS" in line else 
+                                     BLUE if "LEVELS" in line else RED)
+                screen.blit(text, (WIDTH//2 - text.get_width()//2, y_pos))
+                y_pos += 40 if line.startswith("-") else 50
+            
+            pygame.display.flip()
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                    self._show_instructions = False
 
     def load_level(self):
         self._enemies.empty()
         self._boss = None
-        if self._level == 3:
-            self._boss = Boss(WIDTH - 150, HEIGHT - 120)  # Final level boss
-        else:
-            for _ in range(3 + self._level):  # More enemies each level
-                x = random.randint(WIDTH // 2, WIDTH - 60)
-                y = HEIGHT - 80
-                self._enemies.add(Enemy(x, y))
+        self._level_complete = False
+        self._enemies_killed = 0
+        self._enemy_spawn_timer = 0
 
-    def next_level(self):
-        self._level += 1
-        if self._level > 3:
-            self._game_over = True  # End game if levels are done
+    def spawn_enemy(self):
+        if self._enemy_spawn_timer <= 0:
+            x = random.randint(WIDTH // 2, WIDTH - 60)
+            y = HEIGHT - 80
+            
+            # Determine enemy type based on level
+            if self._level == 1:
+                can_shoot = random.random() < 0.3  # 30% chance to shoot in level 1
+            elif self._level == 2:
+                can_shoot = random.random() < 0.7  # 70% chance to shoot in level 2
+            else:  # level 3
+                can_shoot = True  # All enemies shoot in level 3
+            
+            self._enemies.add(Enemy(x, y, can_shoot=can_shoot))
+            self._enemy_spawn_timer = random.randint(30, 90)  # Spawn delay
         else:
-            self.load_level()
+            self._enemy_spawn_timer -= 1
+
+    def show_level_complete(self):
+        screen.fill(BLACK)
+        text = font.render(f"Level {self._level} Complete! Press ENTER to continue", True, WHITE)
+        screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2))
+        pygame.display.flip()
+        
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                    waiting = False
+                    self._level += 1
+                    if self._level <= 3:
+                        self.load_level()
+                    else:
+                        self._won_game = True
+                        self._game_over = True
 
     def update(self):
+        if self._level_complete:
+            return
+
+        # Spawn new enemies continuously
+        self.spawn_enemy()
+
         self._tank.update()
         self._enemies.update()
+        
         if self._boss:
             self._boss.update()
 
-        # Collision: projectile vs enemy
-        for bullet in self._tank.get_projectiles():
+        # Player bullets vs enemies
+        for bullet in self._tank._projectiles:
             for enemy in self._enemies:
                 if bullet.get_rect().colliderect(enemy.get_rect()):
                     enemy.take_damage(bullet.get_damage())
                     bullet.kill()
                     if not enemy.is_alive():
                         self._enemies.remove(enemy)
-                        self._score += 10  # Add score
+                        self._score += 10
+                        self._enemies_killed += 1
 
+            # Player bullets vs boss
             if self._boss and bullet.get_rect().colliderect(self._boss.get_rect()):
                 self._boss.take_damage(bullet.get_damage())
                 bullet.kill()
                 if not self._boss.is_alive():
                     self._boss = None
                     self._score += 100
-                    self.next_level()
+                    self._level_complete = True
 
-        # Collision: enemy touches tank
+            # Player bullets vs enemy bullets
+            for enemy in self._enemies:
+                for enemy_bullet in enemy._projectiles:
+                    if bullet.get_rect().colliderect(enemy_bullet.get_rect()):
+                        bullet.kill()
+                        enemy_bullet.kill()
+
+        # Enemy bullets vs player
+        for enemy in self._enemies:
+            for bullet in enemy._projectiles:
+                if bullet.get_rect().colliderect(self._tank.get_rect()):
+                    self._tank.take_damage(bullet.get_damage())
+                    bullet.kill()
+
+        # Boss bullets vs player
+        if self._boss:
+            for bullet in self._boss._projectiles:
+                if bullet.get_rect().colliderect(self._tank.get_rect()):
+                    self._tank.take_damage(bullet.get_damage())
+                    bullet.kill()
+
+        # Enemy contact damage
         for enemy in self._enemies:
             if self._tank.get_rect().colliderect(enemy.get_rect()):
                 self._tank.take_damage(1)
@@ -203,51 +334,84 @@ class Game:
         if self._boss and self._tank.get_rect().colliderect(self._boss.get_rect()):
             self._tank.take_damage(2)
 
+        # Level completion conditions
+        if self._level < 3 and self._enemies_killed >= 20:
+            self._level_complete = True
+        elif self._level == 3:
+            if self._enemies_killed >= 20 and not self._boss:
+                self._boss = Boss(WIDTH - 150, HEIGHT - 120)
+            elif self._boss and not self._boss.is_alive():
+                self._level_complete = True
+        
         if not self._tank.is_alive():
             self._game_over = True
 
-        if not self._boss and not self._enemies and self._level < 3:
-            self.next_level()
-
     def draw_ui(self):
-        # Display health, lives, score, level
         screen.blit(font.render(f"Health: {self._tank.get_health()}", True, WHITE), (10, 10))
         screen.blit(font.render(f"Lives: {self._tank.get_lives()}", True, WHITE), (10, 40))
         screen.blit(font.render(f"Score: {self._score}", True, WHITE), (10, 70))
         screen.blit(font.render(f"Level: {self._level}", True, WHITE), (10, 100))
+        screen.blit(font.render(f"Killed: {self._enemies_killed}/20", True, WHITE), (10, 130))
+        
+        if self._level == 3 and self._enemies_killed >= 20 and not self._boss:
+            screen.blit(font.render("BOSS INCOMING!", True, RED), (WIDTH - 200, 10))
 
     def render(self):
-        screen.fill((30, 30, 30))  # Clear screen
-        self._tank.draw(screen)  # Draw tank
+        screen.fill((30, 30, 30))
+        
+        # Draw ground
+        pygame.draw.rect(screen, (100, 100, 100), (0, HEIGHT - 40, WIDTH, 40))
+        
+        self._tank.draw(screen)
         for enemy in self._enemies:
-            enemy.draw(screen)  # Draw each enemy
+            enemy.draw(screen)
         if self._boss:
-            self._boss.draw(screen)  # Draw boss if exists
-        self.draw_ui()  # Draw stats
-        pygame.display.flip()  # Update display
+            self._boss.draw(screen)
+        
+        self.draw_ui()
+        pygame.display.flip()
 
     def run(self):
+        self.show_instructions()
+        
         while not self._game_over:
-            clock.tick(60)  # Maintain 60 FPS
+            clock.tick(60)
+            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                    self._tank.shoot()  # Shoot on spacebar
+                    self._tank.shoot()
 
             keys = pygame.key.get_pressed()
-            self._tank.move(keys)  # Move tank
+            self._tank.move(keys)
 
-            self.update()  # Update game state
-            self.render()  # Render everything
+            self.update()
+            self.render()
+            
+            if self._level_complete:
+                self.show_level_complete()
 
-        self.show_game_over()  # End screen
+        self.show_game_over()
 
     def show_game_over(self):
         screen.fill(BLACK)
-        text = font.render("GAME OVER - Press R to Restart", True, WHITE)
-        screen.blit(text, (WIDTH // 2 - 200, HEIGHT // 2))
+        if self._won_game:
+            text = font.render("CONGRATULATIONS! You Won!", True, GREEN)
+            score_text = font.render(f"Final Score: {self._score}", True, WHITE)
+            restart = font.render("Press R to Restart", True, WHITE)
+            screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - 50))
+            screen.blit(score_text, (WIDTH//2 - score_text.get_width()//2, HEIGHT//2))
+            screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2 + 50))
+        else:
+            text = font.render("GAME OVER", True, RED)
+            score_text = font.render(f"Score: {self._score}", True, WHITE)
+            restart = font.render("Press R to Restart", True, WHITE)
+            screen.blit(text, (WIDTH//2 - text.get_width()//2, HEIGHT//2 - 50))
+            screen.blit(score_text, (WIDTH//2 - score_text.get_width()//2, HEIGHT//2))
+            screen.blit(restart, (WIDTH//2 - restart.get_width()//2, HEIGHT//2 + 50))
+        
         pygame.display.flip()
         self.wait_restart()
 
@@ -258,9 +422,8 @@ class Game:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                    self.__init__()  # Restart game
+                    self.__init__()
                     self.run()
 
-# Start the game
 if __name__ == "__main__":
     Game().run()
