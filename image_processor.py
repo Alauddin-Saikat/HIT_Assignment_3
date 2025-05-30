@@ -57,8 +57,4 @@ class ImageProcessor:
         except Exception as e:
             raise e
 
-# =====================================================
-# Subclass: AdvancedImageEditor
-# Handles GUI and inherits functionality from ImageProcessor
-# Demonstrates Inheritance and Polymorphism
-# =====================================================
+
